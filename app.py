@@ -48,7 +48,7 @@ if st.session_state.cases:
     for name in judges_names:
         df_input[name] = ""
     
-    edited_df = st.data_editor(df_input, num_rows="dynamic", use_container_width=True)
+    edited_df = st.data_editor(df_input, num_rows="dynamic", key="editor", use_container_width=True)
 
     if st.button("🚀 استخراج الجدول النهائي المرتب بالمسلسل"):
         final_list = []
@@ -56,7 +56,7 @@ if st.session_state.cases:
 
         for _, row in edited_df.iterrows():
             case_entry = {
-                'رقم الطعن': row['رقم الطعن'], 'السنة': row['السنة'],
+                'رقم_الطعن': row['رقم الطعن'], 'السنة': row['السنة'],
                 'الطاعن': row['اسم الطاعن'], 'المحكمة': row['المحكمة المصدر'],
                 'التهمة': row['التهمة'],
                 'المقرر': "",
@@ -80,17 +80,52 @@ if st.session_state.cases:
             
             final_list.append(case_entry)
 
-        # 1. الترتيب أولاً حسب أقدمية المقرر (sort_idx)
+        # الترتيب ثم إضافة المسلسل
         res_df = pd.DataFrame(final_list).sort_values('sort_idx')
-
-        # 2. إضافة عمود المسلسل (م) بعد الترتيب
         res_df.insert(0, 'م', range(1, len(res_df) + 1))
-
-        # 3. حذف عمود الترتيب المساعد
         res_df = res_df.drop(columns=['sort_idx'])
-
-        st.success("✅ تم الترتيب وإضافة المسلسل!")
+        
+        st.session_state.final_df = res_df # حفظ النتيجة في السيشن
+        st.success("✅ تم الترتيب بنجاح!")
         st.dataframe(res_df, use_container_width=True)
 
-        # جهوزية ملف الإكسيل والورد (كما شرحنا سابقاً)
-        # ... (أزرار التحميل هنا)
+    # --- أزرار الطباعة والتحميل ---
+    if 'final_df' in st.session_state:
+        st.divider()
+        st.header("🖨️ مركز طباعة المستندات")
+        c1, c2, c3 = st.columns(3)
+        
+        data_to_print = st.session_state.final_df.to_dict('records')
+        context = {'cases': data_to_print, 'date': date_val}
+
+        with c1:
+            try:
+                doc1 = DocxTemplate("template_roll.docx")
+                doc1.render(context)
+                bio1 = io.BytesIO()
+                doc1.save(bio1)
+                st.download_button("📄 تحميل رول الجلسة", bio1.getvalue(), f"Roll_{date_val}.docx")
+            except: st.warning("قالب الرول غير موجود")
+
+        with c2:
+            try:
+                doc2 = DocxTemplate("template_minutes.docx")
+                doc2.render(context)
+                bio2 = io.BytesIO()
+                doc2.save(bio2)
+                st.download_button("📜 تحميل المحاضر", bio2.getvalue(), f"Minutes_{date_val}.docx")
+            except: st.warning("قالب المحاضر غير موجود")
+
+        with c3:
+            try:
+                doc3 = DocxTemplate("template_facts.docx")
+                doc3.render(context)
+                bio3 = io.BytesIO()
+                doc3.save(bio3)
+                st.download_button("📑 تحميل الوقائع", bio3.getvalue(), f"Facts_{date_val}.docx")
+            except: st.warning("قالب الوقائع غير موجود")
+
+if st.button("🗑️ مسح الجلسة وبدء جديد"):
+    st.session_state.cases = []
+    if 'final_df' in st.session_state: del st.session_state.final_df
+    st.rerun()
