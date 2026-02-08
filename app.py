@@ -1,13 +1,11 @@
 import streamlit as st
 import pandas as pd
 
-# إعداد الصفحة
-st.set_page_config(page_title="نظام سكرتارية النقض", layout="wide")
+st.set_page_config(page_title="نظام سكرتارية النقض الذكي", layout="wide")
 
-st.title("⚖️ نظام توزيع طعون الجلسة الذكي")
+st.title("⚖️ نظام توزيع طعون الجلسة (دمج المقرر والأعضاء)")
 st.write("رئاسة المستشار/ نبيل الكشكى")
 
-# قائمة المستشارين بالترتيب
 judges_names = [
     "نبيل الكشكى", "سامح عبد الرحيم", "محمود صديق", 
     "ماجد ابراهيم", "محسن أبو بكر", "حاتم غراب", 
@@ -17,9 +15,8 @@ judges_names = [
 if 'cases' not in st.session_state:
     st.session_state.cases = []
 
-# --- القائمة الجانبية ---
 with st.sidebar:
-    st.header("📝 إدخال بيانات الطعن")
+    st.header("📝 إدخال طعن جديد")
     date_val = st.text_input("تاريخ الجلسة", value="06-02-2026")
     c_no = st.text_input("رقم الطعن")
     c_year = st.text_input("السنة")
@@ -36,11 +33,11 @@ with st.sidebar:
             })
             st.toast(f"تم إضافة طعن رقم {c_no}")
         else:
-            st.error("برجاء إدخال رقم الطعن!")
+            st.error("ادخل رقم الطعن!")
 
-# --- الجزء الرئيسي ---
 if st.session_state.cases:
-    st.header("📊 جدول التوزيع (+ مقرر / - مشترك)")
+    st.header("📊 جدول التوزيع")
+    st.info("بمجرد وضع (+) أو (-) أمام اسم المستشار، سيتم إدراجه كعضو في الهيئة تلقائياً.")
     
     df_input = pd.DataFrame(st.session_state.cases)
     for name in judges_names:
@@ -48,7 +45,7 @@ if st.session_state.cases:
     
     edited_df = st.data_editor(df_input, num_rows="dynamic", use_container_width=True)
 
-    if st.button("🚀 معالجة وترتيب النتائج"):
+    if st.button("🚀 توليد الجدول النهائي"):
         final_list = []
         rank_map = {name: i for i, name in enumerate(judges_names)}
 
@@ -61,33 +58,37 @@ if st.session_state.cases:
                 'م4': "", 'م5': "", 'sort_idx': 999
             }
             
-            others = []
+            # قائمة لاحتواء أي مستشار تم تعليمه بـ + أو -
+            selected_members = []
+            
             for judge in judges_names:
                 mark = str(row[judge]).strip()
-                if mark == "+":
-                    case_entry['المقرر'] = judge
-                    case_entry['sort_idx'] = rank_map[judge]
-                elif mark == "-":
+                if mark in ["+", "-"]:
+                    # استبعاد الثلاثة الكبار من القائمة الديناميكية لأنهم م1، م2، م3 ثوابت
                     if judge not in ["نبيل الكشكى", "سامح عبد الرحيم", "محمود صديق"]:
-                        others.append(judge)
+                        selected_members.append(judge)
+                    
+                    # إذا كانت العلامة + يكون هو المقرر
+                    if mark == "+":
+                        case_entry['المقرر'] = judge
+                        case_entry['sort_idx'] = rank_map[judge]
             
-            if len(others) >= 1: case_entry['م4'] = others[0]
-            if len(others) >= 2: case_entry['م5'] = others[1]
+            # ملء م4 وم5 تلقائياً من المختارين (سواء كانوا + أو -)
+            if len(selected_members) >= 1: case_entry['م4'] = selected_members[0]
+            if len(selected_members) >= 2: case_entry['م5'] = selected_members[1]
             
             final_list.append(case_entry)
 
         res_df = pd.DataFrame(final_list).sort_values('sort_idx').drop(columns=['sort_idx'])
-        st.success("✅ تم الترتيب بنجاح!")
+        st.success("✅ تم المعالجة! المقرر أصبح عضواً تلقائياً في خانات الهيئة.")
         st.dataframe(res_df, use_container_width=True)
 
-        # تجهيز ملف التحميل
-        towrite = pd.ExcelWriter(f'session_{date_val}.xlsx', engine='openpyxl')
-        res_df.to_excel(towrite, index=False)
-        towrite.close()
-        
-        with open(f'session_{date_val}.xlsx', 'rb') as f:
-            st.download_button("📥 تحميل ملف الإكسيل النهائي", f, f"session_{date_val}.xlsx")
+        # تحميل الملف
+        file_name = f"رول_{date_val}.xlsx"
+        res_df.to_excel(file_name, index=False)
+        with open(file_name, 'rb') as f:
+            st.download_button("📥 تحميل الرول النهائي", f, file_name=file_name)
 
-if st.button("🗑️ مسح الكل"):
+if st.button("🗑️ مسح الجلسة"):
     st.session_state.cases = []
     st.rerun()
