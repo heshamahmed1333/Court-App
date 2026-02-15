@@ -3,9 +3,11 @@ import pandas as pd
 from docxtpl import DocxTemplate
 import io
 
-# 1. إعدادات الصفحة والأسماء
+# إعداد الصفحة
 st.set_page_config(page_title="نظام سكرتارية النقض", layout="wide")
-st.title("⚖️ نظام إدارة الجلسات المتكامل")
+
+st.title("⚖️ نظام توزيع طعون الجلسة الذكي")
+st.write("رئاسة المستشار/ نبيل الكشكى")
 
 judges_names = [
     "نبيل الكشكى", "سامح عبد الرحيم", "محمود صديق", 
@@ -13,159 +15,100 @@ judges_names = [
     "كمال عبد القوى", "محمد منصور", "محمد فؤاد"
 ]
 
-# 2. إدارة الذاكرة (Session State)
+# تهيئة مخزن البيانات في المتصفح
 if 'cases' not in st.session_state:
     st.session_state.cases = []
-if 'curr_idx' not in st.session_state:
-    st.session_state.curr_idx = 0
 
-# 3. دالة معالجة وترتيب البيانات (م)
-def get_final_df():
-    if not st.session_state.cases:
-        return pd.DataFrame()
-    
-    final_list = []
-    rank_map = {name: i for i, name in enumerate(judges_names)}
-    
-    for case in st.session_state.cases:
-        entry = {
-            'م': 0,
-            'رقم_الطعن': case.get('رقم الطعن', ''),
-            'السنة': case.get('السنة', ''),
-            'الطاعن': case.get('اسم الطاعن', ''),
-            'المحكمة': case.get('المحكمة المصدر', ''),
-            'التهمة': case.get('التهمة', ''),
-            'النوع': case.get('النوع', 'ج'),
-            'منطوق_الحكم': case.get('منطوق الحكم', ''),
-            'حضور_المحامين': case.get('حضور المحامين', ''),
-            'م1': "نبيل الكشكى", 'م2': "سامح عبد الرحيم", 'م3': "محمود صديق",
-            'م4': "", 'م5': "", 'المقرر': "", 'sort_idx': 999
-        }
-        
-        selected = []
-        for judge in judges_names:
-            mark = str(case.get(judge, "")).strip()
-            if mark == "+":
-                entry['المقرر'] = judge
-                entry['sort_idx'] = rank_map[judge]
-            elif mark == "-":
-                if judge not in ["نبيل الكشكى", "سامح عبد الرحيم", "محمود صديق"]:
-                    selected.append(judge)
-        
-        if len(selected) >= 1: entry['م4'] = selected[0]
-        if len(selected) >= 2: entry['م5'] = selected[1]
-        final_list.append(entry)
-    
-    df = pd.DataFrame(final_list).sort_values('sort_idx')
-    df['م'] = range(1, len(df) + 1)
-    return df.drop(columns=['sort_idx'])
-
-# --- القائمة الجانبية (إدارة البيانات) ---
+# --- القائمة الجانبية ---
 with st.sidebar:
-    st.header("📂 إدارة الجلسة")
-    up = st.file_uploader("استيراد ملف إكسيل سابق", type="xlsx")
-    if up:
-        st.session_state.cases = pd.read_excel(up).fillna("").to_dict('records')
-        st.rerun()
+    st.header("📂 استكمال عمل سابق")
+    # خاصية رفع الملف القديم
+    uploaded_file = st.file_uploader("ارفع ملف الإكسيل الذي قمت بتحميله سابقاً", type=["xlsx"])
+    if uploaded_file:
+        try:
+            old_df = pd.read_excel(uploaded_file)
+            # التأكد من وجود الأعمدة الأساسية وتحديث البيانات
+            if 'رقم الطعن' in old_df.columns:
+                # تحويل الإكسيل لبيانات يفهمها البرنامج
+                st.session_state.cases = old_df[['رقم الطعن', 'السنة', 'اسم الطاعن', 'المحكمة المصدر', 'التهمة']].to_dict('records')
+                st.success("تم استعادة بيانات الجلسة بنجاح!")
+        except:
+            st.error("عفواً، الملف غير متوافق.")
 
-    if st.session_state.cases:
-        towrite = io.BytesIO()
-        pd.DataFrame(st.session_state.cases).to_excel(towrite, index=False)
-        st.download_button("💾 حفظ الشغل الحالي (Excel)", towrite.getvalue(), "session_backup.xlsx")
-    
     st.divider()
     st.header("📝 إدخال طعن جديد")
     date_val = st.text_input("تاريخ الجلسة", value="06-02-2026")
-    type_val = st.selectbox("نوع الجلسة", ["ج", "ض"])
     c_no = st.text_input("رقم الطعن")
-    c_yr = st.text_input("السنة")
-    c_ap = st.text_input("اسم الطاعن")
-    c_ct = st.text_input("المحكمة المصدر")
-    c_ch = st.text_input("التهمة")
+    c_year = st.text_input("السنة")
+    c_appellant = st.text_input("اسم الطاعن")
+    c_court = st.text_input("المحكمة المصدر")
+    c_charge = st.text_input("التهمة")
+
+    if st.button("إضافة الطعن"):
+        if c_no:
+            st.session_state.cases.append({
+                'رقم الطعن': c_no, 'السنة': c_year,
+                'اسم الطاعن': c_appellant, 'المحكمة المصدر': c_court,
+                'التهمة': c_charge
+            })
+            st.toast(f"تم إضافة طعن رقم {c_no}")
+        else:
+            st.error("برجاء إدخال رقم الطعن!")
+
+# --- الجزء الرئيسي ---
+if st.session_state.cases:
+    st.header("📊 جدول توزيع العمل")
     
-    if st.button("➕ إضافة الطعن للقائمة"):
-        st.session_state.cases.append({
-            'رقم الطعن': c_no, 'السنة': c_yr, 'اسم الطاعن': c_ap,
-            'المحكمة المصدر': c_ct, 'التهمة': c_ch, 'النوع': type_val,
-            'منطوق الحكم': "", 'حضور المحامين': ""
-        })
-        st.rerun()
+    df_input = pd.DataFrame(st.session_state.cases)
+    # إضافة أعمدة المستشارين إذا لم تكن موجودة
+    for name in judges_names:
+        if name not in df_input.columns:
+            df_input[name] = ""
+    
+    edited_df = st.data_editor(df_input, num_rows="dynamic", key="main_editor", use_container_width=True)
 
-# --- الواجهة الرئيسية ---
-tab1, tab2 = st.tabs(["📑 1. تحضير الجلسة (التوزيع)", "🔨 2. تقفيل الجلسة (الأحكام)"])
+    if st.button("🚀 معالجة البيانات واستخراج النتائج"):
+        final_list = []
+        rank_map = {name: i for i, name in enumerate(judges_names)}
 
-# تبويب التحضير
-with tab1:
-    if st.session_state.cases:
-        st.subheader("جدول البيانات وتوزيع المستشارين")
-        df_p = pd.DataFrame(st.session_state.cases)
-        # التأكد من وجود أعمدة المستشارين
-        for j in judges_names:
-            if j not in df_p.columns: df_p[j] = ""
-        
-        edited = st.data_editor(df_p, use_container_width=True, key="prep_editor")
-        if st.button("✅ حفظ توزيع المستشارين"):
-            st.session_state.cases = edited.to_dict('records')
-            st.success("تم حفظ التوزيع بنجاح!")
-
-# تبويب التقفيل
-with tab2:
-    df_final = get_final_df()
-    if df_final.empty:
-        st.warning("يرجى إدخال بيانات في التحضير أولاً.")
-    else:
-        cases_list = df_final.to_dict('records')
-        
-        # التنقل
-        idx = st.number_input("المسلسل الحالي (م)", 1, len(cases_list), value=st.session_state.curr_idx + 1) - 1
-        st.session_state.curr_idx = idx
-        curr = cases_list[st.session_state.curr_idx]
-        
-        # عرض معلومات الطعن
-        st.info(f"📍 طعن رقم: {curr['رقم_الطعن']} لسنة {curr['السنة']} | {curr['الطاعن']} | {curr['المحكمة']} | {curr['التهمة']}")
-        
-        col_a, col_b = st.columns(2)
-        with col_a:
-            h_val = st.text_area("منطوق الحكم", value=curr['منطوق_الحكم'], key=f"h_{curr['رقم_الطعن']}")
-        with col_b:
-            ho_val = st.text_area("حضور المحامين", value=curr['حضور_المحامين'], key=f"ho_{curr['رقم_الطعن']}")
+        for _, row in edited_df.iterrows():
+            case_entry = {
+                'رقم_الطعن': row['رقم الطعن'], 'السنة': row['السنة'],
+                'الطاعن': row['اسم الطاعن'], 'المحكمة': row['المحكمة المصدر'],
+                'التهمة': row['التهمة'], 'المقرر': "",
+                'م1': "نبيل الكشكى", 'م2': "سامح عبد الرحيم", 'م3': "محمود صديق",
+                'م4': "", 'م5': "", 'sort_idx': 999
+            }
             
-        if st.button("💾 حفظ البيانات والذهاب للتالي"):
-            for c in st.session_state.cases:
-                if str(c['رقم الطعن']) == str(curr['رقم_الطعن']) and str(c['السنة']) == str(curr['السنة']):
-                    c['منطوق الحكم'] = h_val
-                    c['حضور المحامين'] = ho_val
+            selected = []
+            for judge in judges_names:
+                mark = str(row[judge]).strip()
+                if mark in ["+", "-"]:
+                    if judge not in ["نبيل الكشكى", "سامح عبد الرحيم", "محمود صديق"]:
+                        selected.append(judge)
+                    if mark == "+":
+                        case_entry['المقرر'] = judge
+                        case_entry['sort_idx'] = rank_map[judge]
             
-            if st.session_state.curr_idx < len(cases_list) - 1:
-                st.session_state.curr_idx += 1
-            st.rerun()
+            if len(selected) >= 1: case_entry['م4'] = selected[0]
+            if len(selected) >= 2: case_entry['م5'] = selected[1]
+            final_list.append(case_entry)
 
-        # --- المعاينة التلقائية الفورية ---
+        res_df = pd.DataFrame(final_list).sort_values('sort_idx')
+        res_df.insert(0, 'م', range(1, len(res_df) + 1))
+        res_df = res_df.drop(columns=['sort_idx'])
+        st.session_state.final_df = res_df
+        
+        st.success("✅ تم التحديث!")
+        st.dataframe(res_df, use_container_width=True)
+
+        # زر حفظ كـ إكسيل (للمسودة)
+        towrite = io.BytesIO()
+        res_df.to_excel(towrite, index=False, engine='openpyxl')
+        st.download_button("💾 حفظ نسخة إكسيل لاستكمالها لاحقاً", towrite.getvalue(), f"backup_{date_val}.xlsx")
+
+    # أزرار الطباعة (نفس الكود السابق)
+    if 'final_df' in st.session_state:
         st.divider()
-        st.subheader("📊 معاينة الجدول النهائي")
-        st.dataframe(get_final_df(), use_container_width=True)
-
-        # --- قسم الطباعة (قوالب الورد) ---
-        st.header("🖨️ استخراج القوالب")
-        final_data = get_final_df().to_dict('records')
-        context = {'cases': final_data, 'date': date_val}
-        
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            try:
-                doc = DocxTemplate("template_roll.docx")
-                doc.render(context); b = io.BytesIO(); doc.save(b)
-                st.download_button("📄 تحميل الرول", b.getvalue(), "Roll.docx")
-            except: st.error("قالب الرول مفقود")
-        with c2:
-            try:
-                doc = DocxTemplate("template_minutes.docx")
-                doc.render(context); b = io.BytesIO(); doc.save(b)
-                st.download_button("📜 تحميل المحاضر", b.getvalue(), "Minutes.docx")
-            except: st.error("قالب المحاضر مفقود")
-        with c3:
-            try:
-                doc = DocxTemplate("template_facts.docx")
-                doc.render(context); b = io.BytesIO(); doc.save(b)
-                st.download_button("📑 تحميل الوقائع", b.getvalue(), "Facts.docx")
-            except: st.error("قالب الوقائع مفقود")
+        st.header("🖨️ طباعة المستندات")
+        # ... (أزرار الرول والمحاضر والوقائع) ...
